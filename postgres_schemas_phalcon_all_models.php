@@ -2,29 +2,27 @@
 declare(strict_types = 1);
 namespace System\Component\Dev;
 
-use System\Injectable;
-use System\Helper\File;
+use System\Di\Injectable;
+use Phalcon\Text;
 
 /**
  * Class HandleModels
  *
  *
- * @package System\Component
+ * @package System\Component\Dev
  * @author renato gabriel
- * @since 24/01/2020
- * @version 1.0
  */
 class HandleModels extends Injectable
 {
 
-    protected $modelOptions = [
+    protected array $modelOptions = [
         '--force'
     ];
 
-    protected $abstractOptions = [
+    protected array $abstractOptions = [
         '--doc',
-        'relations',
-        'fk',
+        // 'relations',
+        // 'fk',
         'annotate',
         'force',
         'get-set',
@@ -32,7 +30,11 @@ class HandleModels extends Injectable
         'force'
     ];
 
-    protected $sourceConfFile = PATH_CONFIG . DS . 'config_webtools.php';
+    /**
+     *
+     * @var string
+     */
+    protected string $sourceConfFile = PATH_CONFIG . DS . 'config_webtools.php';
 
     /**
      *
@@ -40,9 +42,15 @@ class HandleModels extends Injectable
      *      
      * @var string
      */
-    protected $extends = '\\\System\\\Mvc\\\Model';
+    protected string $extends = '\\\System\\\Mvc\\\Model';
 
     protected $data;
+
+    /**
+     *
+     * @var boolean
+     */
+    protected $extendAbstract = true;
 
     /**
      *
@@ -57,73 +65,114 @@ class HandleModels extends Injectable
      * @param array $project
      * @return array
      */
-    public function __construct(bool $abstract = false, bool $clear = false, array $skip = [], array $project = [
-        'vztus-cms'
-    ])
+    public function __construct(bool $abstract = false, bool $clear = false, array $skip = [], array $schemas = [])
     {
-        $sql = "SELECT nspname as schema FROM pg_catalog.pg_namespace WHERE nspname NOT IN('pg_toast','pg_temp_1','pg_toast_temp_1','pg_catalog','public','information_schema')";
+        $sql = "SELECT table_schema as schema,table_name as table, table_type as type FROM information_schema.tables ORDER BY table_schema,table_name;";
         $fetchSchemas = $this->db->fetchAll($sql);
+        $projectDir = '/var/www/html/webtools';
+        $modelDir = realpath($projectDir);
         $commands = [
-            'cd /var/www/html/' . $project[0]
+            'cd ' . $projectDir
         ];
-
         foreach ($fetchSchemas as $row) {
+
             $schema = $row['schema'];
-            $schemaUc = ucfirst($row['schema']);
+
+            if (($schema === 'information_schema' || $schema === 'pg_catalog') || (count($schemas) && ! in_array($schema, $schemas))) {
+                continue;
+            }
+
+            $isView = ($row['type'] === 'VIEW') ? true : false;
+            $schemaUc = Text::camelize($row['schema']);
+            $table = Text::camelize($row['table']);
 
             $configFile = realpath($this->sourceConfFile);
 
             if (true === $abstract) {
-                $dir = realpath(PATH_MODELS . DS . 'Abstracts' . DS . $schemaUc);
+                $dir = realpath($modelDir . DS . 'Abstracts' . DS . $schemaUc);
                 $nameSpace = sprintf('App\\\Models\\\Abstracts\\\%s', $schemaUc);
-                if (! realpath(PATH_MODELS . DS . 'Abstracts')) {
-                    File::criarDir(PATH_MODELS . DS . 'Abstracts');
+                if (! realpath($modelDir . DS . 'Abstracts')) {
+                    $this->tag->criarDir($modelDir . DS . 'Abstracts');
                 }
                 if (! $dir) {
-                    File::criarDir(PATH_MODELS . DS . 'Abstracts' . DS . $schemaUc);
-                    $dir = realpath(PATH_MODELS . DS . 'Abstracts' . DS . $schemaUc);
+                    $this->tag->criarDir($modelDir . DS . 'Abstracts' . DS . $schemaUc);
+                    $dir = realpath($modelDir . DS . 'Abstracts' . DS . $schemaUc);
                 }
             } else {
-                $dir = realpath(PATH_MODELS . DS . $schemaUc);
+                $dir = realpath($modelDir . DS . $schemaUc);
                 $nameSpace = sprintf('App\\\Models\\\%s', $schemaUc);
+                if ($this->isExtendAbstract()) {
+                    $this->extends = sprintf('\\\App\\\Models\\\Abstracts\\\%s\\\Abstract%s', $schemaUc, $table);
+                }
+
                 if (! $dir) {
-                    File::criarDir(PATH_MODELS . DS . $schemaUc);
-                    $dir = realpath(PATH_MODELS . DS . $schemaUc);
+                    $this->tag->criarDir($modelDir . DS . $schemaUc);
+                    $dir = realpath($modelDir . DS . $schemaUc);
                 }
             }
 
-            if (true === $clear and ! in_array($schema, $skip)) {
-                $di = new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS);
-                $ri = new \RecursiveIteratorIterator($di, \RecursiveIteratorIterator::CHILD_FIRST);
-                foreach ($ri as $file) {
-                    if ($file->getFilename() === '.gitignore' or $file->isDir()) {
-                        continue;
+            if (true === $isView) {
+                if (true === $abstract) {
+                    $dir = realpath($modelDir . DS . 'Abstracts' . DS . $schemaUc . DS . 'View');
+                    $nameSpace = sprintf('App\\\Models\\\Abstracts\\\%s\\\View', $schemaUc);
+                    if (! $dir) {
+                        $this->tag->criarDir($modelDir . DS . 'Abstracts' . DS . $schemaUc . DS . 'View');
+                        $dir = realpath($modelDir . DS . 'Abstracts' . DS . $schemaUc . DS . 'View');
                     }
-                    unlink($file);
+                } else {
+                    $dir = realpath($modelDir . DS . $schemaUc . DS . 'View');
+                    $nameSpace = sprintf('App\\\Models\\\%s\\\View', $schemaUc);
+                    $this->extends = sprintf('\\\App\\\Models\\\Abstracts\\\%s\\\View\\\Abstract%s', $schemaUc, $table);
+
+                    if (! $dir) {
+                        $this->tag->criarDir($modelDir . DS . $schemaUc . DS . 'View');
+                        $dir = realpath($modelDir . DS . $schemaUc . DS . 'View');
+                    }
                 }
-            } else if (in_array($schema, $skip)) {
+            }
+
+            if (true === $clear && ! in_array($schema, $skip)) {
+                $this->tag->clearDir($dir);
+            } elseif (in_array($schema, $skip)) {
                 continue;
             }
 
-            $commands[] = sprintf('phalcon all-models --schema=%s --namespace=%s --extends=%s --output=%s --config=%s %s 2>&1', $schema, $nameSpace, $this->extends, $dir, $configFile, join(' --', (true === $abstract) ? $this->abstractOptions : $this->modelOptions));
+            $commands[] = sprintf('phalcon model --name=%s --schema=%s --namespace=%s --extends=%s --output=%s --config=%s %s 2>&1', $row['table'], $schema, $nameSpace, $this->extends, $dir, $configFile, join(' --', (true === $abstract) ? $this->abstractOptions : $this->modelOptions));
         }
 
         $verbose = null;
         $returnValue = null;
         exec(join(' && ', $commands), $verbose, $returnValue);
-
         $verbose = array_filter($verbose);
         $return = [
             'return' => $returnValue,
             'command' => $commands,
             'log' => $verbose
         ];
-
         $this->data = $return;
     }
 
     public function getResponse()
     {
         return $this->data;
+    }
+
+    /**
+     *
+     * @return boolean
+     */
+    public function isExtendAbstract(): bool
+    {
+        return $this->extendAbstract;
+    }
+
+    /**
+     *
+     * @param boolean $extendAbstract
+     */
+    public function setExtendAbstract(bool $extendAbstract): self
+    {
+        $this->extendAbstract = $extendAbstract;
+        return $this;
     }
 }
