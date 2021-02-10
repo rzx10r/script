@@ -1,0 +1,170 @@
+<?php
+declare(strict_types = 1);
+
+namespace System\Helper;
+
+/**
+ * Trait FileHelper
+ *
+ * Helper para lidar com arquivos
+ *
+ * @package System\Helper
+ * @author Renato Gabriel
+ */
+trait FileHelper
+{
+
+    public function readDirFiles(string $dir): array
+    {
+        $dir = realpath($dir);
+        $files = [];
+        foreach (glob($dir . DS . "*") as $file) {
+            $files[] = new \SplFileInfo($file);
+        }
+
+        return $files;
+    }
+
+    /**
+     * Cria um diretorio
+     *
+     * @param string $dir
+     * @param number $permissao
+     * @throws \Exception
+     * @return bool
+     */
+    public function criarDir($dir, $permissao = 0777): bool
+    {
+        if (! file_exists($dir)) {
+            if (mkdir($dir, $permissao, true)) {
+                if (! is_writeable($dir)) {
+                    return @chmod($dir, $permissao);
+                    if (! is_writeable($dir)) {
+                        throw new \Exception('Dir is not writeable, and could not correct permissions:' . $dir);
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Remove arquivos de um diretorio mais velho que o numero de horas
+     *
+     * @param string $dir
+     * @param number $hours
+     */
+    public function removeFilesByTime($dir, $hours = 12)
+    {
+        $hours = $hours * 60 * 60;
+        foreach (glob($dir . "*") as $file) {
+            if (filemtime($file) < time() - $hours) {
+                self::removerDir($file);
+            }
+        }
+    }
+
+    /**
+     * Remove um diretorio e todos os arquivos dentro.
+     *
+     * @param string $dir
+     * @return boolean
+     */
+    public function removerDir($dir)
+    {
+        $dir = trim($dir);
+        if ($this->vazio($dir) || $dir == '.' or $dir == '..' or $dir == '/') {
+            return false;
+        }
+
+        return (is_file($dir)) ? @unlink($dir) : array_map([
+            'self',
+            'removerDir'
+        ], glob($dir . '/*')) == @rmdir($dir);
+    }
+
+    /**
+     * Limpa os arquivos de um diretorio
+     *
+     * @param string $dir
+     */
+    public function clearDir($dir)
+    {
+        $files = new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS);
+        $iterator = new \RecursiveIteratorIterator($files, \RecursiveIteratorIterator::CHILD_FIRST);
+        foreach ($iterator as $file) {
+            if ($file->getFilename() === '.gitignore' || $file->isDir()) {
+                continue;
+            }
+            if (file_exists($file->getPathName())) {
+                unlink($file->getPathName());
+            }
+        }
+    }
+
+    /**
+     * Converte bytes para (kb,mb,gb,tb)
+     *
+     * @param string $size
+     * @param number $precision
+     * @return string
+     */
+    public function formatBytes($size, $precision = 2): string
+    {
+        $base = log($size) / log(1024);
+        $suffixes = [
+            '',
+            'kb',
+            'Mb',
+            'Gb',
+            'Tb'
+        ];
+        return round(pow(1024, $base - floor($base)), $precision) . $suffixes[floor($base)];
+    }
+
+    /**
+     * Limpa uma string para um nome de arquivo válido em qualquer OS
+     *
+     * @author renato gabriel
+     *        
+     * @param string $name
+     * @return mixed
+     */
+    public function clearFileName($name)
+    {
+        return preg_replace('([\\/:"*?<>|]+)', '', $name);
+    }
+
+    /**
+     *
+     * @param \XMLReader $xml
+     * @return array
+     */
+    public function xml2Assoc(\XMLReader $xml): array
+    {
+        $assoc = [];
+        while ($xml->read()) {
+            switch ($xml->nodeType) {
+                case \XMLReader::END_ELEMENT:
+                    return $assoc;
+                case \XMLReader::ELEMENT:
+                    $assoc[$xml->name][] = array(
+                        'value' => $xml->isEmptyElement ? '' : self::xml2Assoc($xml)
+                    );
+                    if ($xml->hasAttributes) {
+                        $element = &$assoc[$xml->name][count($assoc[$xml->name]) - 1];
+                        while ($xml->moveToNextAttribute()) {
+                            $element['attributes'][$xml->name] = $xml->value;
+                        }
+                    }
+
+                    break;
+                case \XMLReader::TEXT:
+                case \XMLReader::CDATA:
+                    $assoc .= $xml->value;
+            }
+        }
+        return $assoc;
+    }
+}
