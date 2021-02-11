@@ -1,0 +1,168 @@
+<?php
+
+declare(strict_types=1);
+
+namespace System\Sanitize;
+
+/**
+ * Class FNull
+ *
+ * @package System\Sanitize
+ * @author Renato Gabriel
+ */
+class FNull
+{
+
+    /**
+     * Type
+     *
+     * @var int
+     */
+    protected $type = self::ALL;
+
+    /**
+     * Boolean
+     */
+    public const BOOLEAN = 1;
+
+    /**
+     * Integer
+     */
+    public const INTEGER = 2;
+
+    /**
+     * Empty Array
+     */
+    public const EMPTY_ARRAY = 4;
+
+    /**
+     * String
+     */
+    public const STRING = 8;
+
+    /**
+     * Zero
+     */
+    public const ZERO = 16;
+
+    /**
+     * All
+     */
+    public const ALL = 31;
+
+    /**
+     * Constantes
+     *
+     * @var array
+     */
+    protected $constants = array(
+        self::BOOLEAN => 'boolean',
+        self::INTEGER => 'integer',
+        self::EMPTY_ARRAY => 'array',
+        self::STRING => 'string',
+        self::ZERO => 'zero',
+        self::ALL => 'all'
+    );
+
+    /**
+     * Retorna o tipo
+     *
+     * @return int
+     */
+    public function getType()
+    {
+        return $this->type;
+    }
+
+    /**
+     * Seta o type
+     *
+     * @param null $type
+     * @return $this
+     * @throws \Exception
+     */
+    public function setType($type = NULL)
+    {
+        if (is_array($type)) {
+            $detected = 0;
+            foreach ($type as $value) {
+                if (is_int($value)) {
+                    $detected += $value;
+                } elseif (in_array($value, $this->constants)) {
+                    $detected += array_search($value, $this->constants);
+                }
+            }
+
+            $type = $detected;
+        } elseif (is_string($type)) {
+            if (in_array($type, $this->constants)) {
+                $type = array_search($type, $this->constants);
+            }
+        }
+
+        if (!is_int($type) || ($type < 0) || ($type > self::ALL)) {
+            throw new \Exception(_('tipo inválido'));
+        }
+
+        $this->type = $type;
+        return $this;
+    }
+
+    /**
+     * Filter
+     *
+     * @param
+     *            $value
+     * @return null
+     */
+    public function __invoke($value)
+    {
+        $type = $this->getType();
+
+        // STRING ZERO ('0')
+        if ($type >= self::ZERO) {
+            $type -= self::ZERO;
+            if (is_string($value) && ($value == '0')) {
+                return NULL;
+            }
+        }
+
+        // STRING ('')
+        if ($type >= self::STRING) {
+            $type -= self::STRING;
+            if (is_string($value) && ($value == '')) {
+                return NULL;
+            }
+        }
+
+        // EMPTY_ARRAY (array())
+        if ($type >= self::EMPTY_ARRAY) {
+            $type -= self::EMPTY_ARRAY;
+            if (is_array($value) && ($value == array())) {
+                return NULL;
+            }
+        }
+
+        // INTEGER (0)
+        if ($type >= self::INTEGER) {
+            $type -= self::INTEGER;
+            if (is_int($value) && ($value == 0)) {
+                return NULL;
+            }
+        }
+
+        // BOOLEAN (false)
+        if ($type >= self::BOOLEAN) {
+            $type -= self::BOOLEAN;
+            if (is_bool($value) && ($value == false)) {
+                return NULL;
+            }
+        }
+
+        if (is_string($value) && $value === 'NULL') {
+            return NULL;
+        }
+
+        return $value;
+    }
+}
