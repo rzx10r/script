@@ -1,0 +1,40 @@
+    /**
+     * Phalcon model retrieve default values
+     * 
+     * @return array
+     */
+    public function getDefaultValues(bool $cast = false): array
+    {
+        $metadata = $this->getModelsMetaData();
+        $types = $metadata->getDataTypes($this);
+        $values = $metadata->getDefaultValues($this);
+
+        $return = [];
+        foreach ($values as $key => $value) {
+            if (false === $cast) {
+                $return[$key] = $value;
+            }
+            switch ($types[$key]) {
+                case Column::TYPE_BOOLEAN:
+                    if (true === $cast) {
+                        $return[$key] = (bool) $value;
+                    }
+                    break;
+                case Column::TYPE_SMALLINTEGER:
+                case Column::TYPE_BIGINTEGER:
+                case Column::TYPE_BIGINTEGER:
+                    if (true === $cast) {
+                        $return[$key] = (int) $value;
+                    }
+                    break;
+                case Column::TYPE_TIME:
+                case Column::TYPE_TIMESTAMP:
+                    $return[$key] = null;
+                    break;
+                default:
+                    $return[$key] = $value;
+                    break;
+            }
+        }
+        return $return;
+    }
