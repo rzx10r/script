@@ -1,3 +1,5 @@
+<?php
+
     /**
      * Phalcon model retrieve default values
      * 
