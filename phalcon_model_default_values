@@ -1,11 +1,4 @@
-<?php
-
-    /**
-     * Phalcon model retrieve default values
-     * 
-     * @return array
-     */
-    public function getDefaultValues(bool $cast = false): array
+    public function getDefaultValues(bool $cast = true): array
     {
         $metadata = $this->getModelsMetaData();
         $types = $metadata->getDataTypes($this);
@@ -13,13 +6,15 @@
 
         $return = [];
         foreach ($values as $key => $value) {
+            
             if (false === $cast) {
                 $return[$key] = $value;
             }
+            
             switch ($types[$key]) {
                 case Column::TYPE_BOOLEAN:
                     if (true === $cast) {
-                        $return[$key] = (bool) $value;
+                        $return[$key] = ('false' === $value) ? false : true;
                     }
                     break;
                 case Column::TYPE_SMALLINTEGER:
@@ -27,6 +22,14 @@
                 case Column::TYPE_BIGINTEGER:
                     if (true === $cast) {
                         $return[$key] = (int) $value;
+                    }
+                    break;
+                case Column::TYPE_DOUBLE:
+                case Column::TYPE_FLOAT:
+                    if (true === $cast && null !== $value) {
+                        $return[$key] = (float) $value;
+                    } else if ( null === $value ) {
+                        $return[$key] = null;
                     }
                     break;
                 case Column::TYPE_TIME:
